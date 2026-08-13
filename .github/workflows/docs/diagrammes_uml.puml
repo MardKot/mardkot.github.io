@@ -1,0 +1,686 @@
+@startuml PortoMarket_Diagrams
+
+' ============================================================================
+' PORTO MARKET - DIAGRAMMES UML COMPLETS
+' Application de gestion de marché et livraison à Porto-Novo, Bénin
+' ============================================================================
+
+!theme plain
+!define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-fonts/master/font-awesome-v5
+
+' ============================================================================
+' 1. MODÈLE CONCEPTUEL DE DONNÉES (MCD) / DIAGRAMME DE CLASSES
+' ============================================================================
+
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+title MCD - Modèle Conceptuel de Données
+
+class User {
+  +uid: String [PK]
+  +email: String
+  +name: String
+  +role: Enum {client, manager, chief_buyer, buyer, driver}
+  +agency_id: Integer [FK]
+  +phone_number: String
+  +email_verified_at: DateTime
+  +password: String
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class Agency {
+  +id: Integer [PK]
+  +name: String
+  +market_name: String
+  +location: JSON
+  +cash_balance: Decimal(12,2)
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class Order {
+  +id: Integer [PK]
+  +uid: String
+  +client_id: Integer [FK]
+  +agency_id: Integer [FK]
+  +status: Enum {pending_payment, confirmed, buying, sorting, delivering, completed, cancelled}
+  +total_amount: Decimal(12,2)
+  +momo_transaction_id: String
+  +delivery_address: Text
+  +time_window: String
+  +tracking: JSON
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class OrderItem {
+  +id: Integer [PK]
+  +uid: String
+  +order_id: Integer [FK]
+  +batch_id: Integer [FK]
+  +name: String
+  +description: Text
+  +quantity: String
+  +category: String
+  +is_free_list: Boolean
+  +estimated_budget: Decimal(12,2)
+  +actual_price: Decimal(12,2)
+  +status: Enum {pending, assigned, bought, unavailable, substituted}
+  +substitution_proposal_id: Integer [FK]
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class Batch {
+  +id: Integer [PK]
+  +uid: String
+  +buyer_id: Integer [FK]
+  +agency_id: Integer [FK]
+  +category: String
+  +status: Enum {preparing, active, completed}
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class Product {
+  +id: Integer [PK]
+  +name: String
+  +description: Text
+  +price: Decimal(10,2)
+  +unit: String
+  +image: String
+  +images: JSON
+  +category_id: Integer [FK]
+  +rating: Decimal(3,2)
+  +featured: Boolean
+  +available: Boolean
+  +attributes: JSON
+  +variants: JSON
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class Category {
+  +id: Integer [PK]
+  +name: String
+  +icon: String
+  +order: Integer
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class SubstitutionProposal {
+  +id: Integer [PK]
+  +order_item_id: Integer [FK]
+  +proposed_product_name: String
+  +description: Text
+  +price: Decimal(10,2)
+  +status: Enum {pending, accepted, rejected}
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+class CashLog {
+  +id: Integer [PK]
+  +agency_id: Integer [FK]
+  +type: Enum {credit, debit}
+  +amount: Decimal(12,2)
+  +description: String
+  +user_id: Integer [FK]
+  +created_at: DateTime
+  +updated_at: DateTime
+}
+
+' Relations
+User "1" -- "0..*" Order : "passe (client)"
+User "1" -- "0..*" Order : "gère (manager/buyer/driver)"
+User "1" -- "0..*" Batch : "prépare (buyer)"
+User "1" -- "0..*" CashLog : "effectue"
+Agency "1" -- "0..*" User : "emploie"
+Agency "1" -- "0..*" Order : "reçoit"
+Agency "1" -- "0..*" Batch : "contient"
+Agency "1" -- "0..*" CashLog : "possède"
+Order "1" -- "1..*" OrderItem : "contient"
+Batch "1" -- "0..*" OrderItem : "regroupe"
+Category "1" -- "0..*" Product : "catégorise"
+Product "1" -- "0..*" OrderItem : "est commandé dans"
+OrderItem "1" -- "0..1" SubstitutionProposal : "propose"
+
+note right of User
+  Rôles possibles:
+  - client: passe des commandes
+  - manager: valide et supervise
+  - chief_buyer: supervise les acheteurs
+  - buyer: achète au marché
+  - driver: livre les commandes
+end note
+
+note left of Order
+  Cycle de vie d'une commande:
+  pending_payment → confirmed → buying
+  → sorting → delivering → completed
+end note
+
+@enduml
+
+' ============================================================================
+' 2. DIAGRAMME DE CAS D'UTILISATION
+' ============================================================================
+
+@startuml PortoMarket_UseCase
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Client" as Client
+actor "Manager" as Manager
+actor "Chief Buyer" as ChiefBuyer
+actor "Buyer" as Buyer
+actor "Driver" as Driver
+
+rectangle "Porto Market System" {
+  
+  usecase "S'authentifier" as UC_Auth
+  usecase "Consulter le catalogue" as UC_Catalog
+  usecase "Passer une commande" as UC_Order
+  usecase "Payer (Mobile Money)" as UC_Payment
+  usecase "Suivre sa commande" as UC_Tracking
+  usecase "Valider une commande" as UC_ValidateOrder
+  usecase "Gérer les équipes" as UC_ManageTeam
+  usecase "Créer un batch" as UC_CreateBatch
+  usecase "Marquer un article acheté" as UC_MarkBought
+  usecase "Proposer une substitution" as UC_Substitute
+  usecase "Commencer la livraison" as UC_StartDelivery
+  usecase "Compléter la livraison" as UC_CompleteDelivery
+  usecase "Gérer le catalogue" as UC_ManageCatalog
+  usecase "Consulter cash logs" as UC_CashLogs
+}
+
+' Client
+Client --> UC_Auth
+Client --> UC_Catalog
+Client --> UC_Order
+Client --> UC_Payment
+Client --> UC_Tracking
+
+' Manager
+Manager --> UC_Auth
+Manager --> UC_ValidateOrder
+Manager --> UC_ManageTeam
+Manager --> UC_ManageCatalog
+Manager --> UC_CashLogs
+Manager --> UC_Tracking
+
+' Chief Buyer
+ChiefBuyer --> UC_Auth
+ChiefBuyer --> UC_CreateBatch
+ChiefBuyer --> UC_ManageTeam
+ChiefBuyer --> UC_Substitute
+
+' Buyer
+Buyer --> UC_Auth
+Buyer --> UC_MarkBought
+Buyer --> UC_Substitute
+Buyer --> UC_CreateBatch
+
+' Driver
+Driver --> UC_Auth
+Driver --> UC_StartDelivery
+Driver --> UC_CompleteDelivery
+Driver --> UC_Tracking
+
+' Relations entre cas d'utilisation
+UC_Order ..> UC_Payment : <<include>>
+UC_Order ..> UC_Catalog : <<include>>
+UC_ValidateOrder ..> UC_Order : <<extends>>
+UC_CreateBatch ..> UC_Order : <<extends>>
+
+@enduml
+
+' ============================================================================
+' 3. DIAGRAMME DE SÉQUENCE - PASSER UNE COMMANDE
+' ============================================================================
+
+@startuml PortoMarket_Sequence_Order
+autonumber
+title "Séquence: Passer et traiter une commande"
+
+participant "👤 Client" as Client
+participant "📱 Frontend" as Frontend
+participant "🔥 Firebase Auth" as Auth
+participant "📦 Firestore" as DB
+participant "💳 Payment API" as Payment
+participant "👨‍💼 Manager" as Manager
+
+== Authentification ==
+Client -> Frontend: Login/Signup
+Frontend -> Auth: authenticate()
+Auth --> Frontend: userCredential
+Frontend -> DB: getProfile(uid)
+DB --> Frontend: UserProfile
+
+== Consultation Catalogue ==
+Client -> Frontend: Consulter produits
+Frontend -> DB: query(products)
+DB --> Frontend: Products[]
+Frontend --> Client: Afficher catalogue
+
+== Création Commande ==
+Client -> Frontend: Ajouter au panier
+Client -> Frontend: Valider commande
+Frontend -> DB: createOrder({items, total, address})
+DB --> Frontend: orderId
+
+== Paiement ==
+Client -> Frontend: Choisir paiement (MoMo)
+Frontend -> Payment: initTransaction(amount)
+Payment --> Client: USSD Prompt
+Client -> Payment: Confirmer paiement
+Payment --> Frontend: paymentSuccess
+Frontend -> DB: updateOrder(orderId, {status: 'confirmed'})
+
+== Validation Manager ==
+Manager -> Frontend: Voir commandes pending
+Frontend -> DB: query(orders, status='pending_payment')
+DB --> Frontend: Orders[]
+Manager -> Frontend: Valider commande #orderId
+Frontend -> DB: updateOrder(orderId, {status: 'confirmed'})
+DB --> Manager: ✓ Confirmé
+
+note right: La commande passe en statut\n"buying" et est assignée aux buyers
+
+@enduml
+
+' ============================================================================
+' 4. DIAGRAMME DE SÉQUENCE - ACHAT AU MARCHÉ
+' ============================================================================
+
+@startuml PortoMarket_Sequence_Buying
+autonumber
+title "Séquence: Processus d'achat par le Buyer"
+
+participant "👨‍💼 Buyer" as Buyer
+participant "📱 Mobile App" as App
+participant "📦 Firestore" as DB
+participant "👨‍💼 Chief Buyer" as ChiefBuyer
+
+== Préparation ==
+ChiefBuyer -> App: Créer batch par catégorie
+App -> DB: createBatch({buyerId, category, agencyId})
+DB --> App: batchId
+
+== Achat en cours ==
+Buyer -> App: Scanner/Marquer article acheté
+App -> DB: markItemAsBought(orderId, itemId, actualPrice)
+DB --> App: ✓ Updated
+
+alt Article indisponible
+  Buyer -> App: Marquer comme unavailable
+  App -> DB: markItemUnavailable(orderId, itemId)
+  DB --> App: ✓ Updated
+else Besoin substitution
+  Buyer -> App: Proposer produit alternatif
+  App -> DB: createSubstitutionProposal({itemId, newName, price})
+  DB --> App: proposalId
+  App -> ChiefBuyer: Notification validation
+  ChiefBuyer -> App: Accepter/Rejeter
+  App -> DB: updateSubstitutionStatus(status)
+end
+
+== Fin du batch ==
+Buyer -> App: Terminer le batch
+App -> DB: updateBatch(batchId, {status: 'completed'})
+DB --> App: ✓ Batch completed
+
+note right: Si tous les items sont traités,\nla commande passe automatiquement\nen statut "sorting"
+
+@enduml
+
+' ============================================================================
+' 5. DIAGRAMME DE SÉQUENCE - LIVRAISON
+' ============================================================================
+
+@startuml PortoMarket_Sequence_Delivery
+autonumber
+title "Séquence: Livraison de la commande"
+
+participant "🚚 Driver" as Driver
+participant "📱 Mobile App" as App
+participant "📦 Firestore" as DB
+participant "👤 Client" as Client
+participant "🔔 Notifications" as Notify
+
+== Assignation ==
+Manager -> App: Assigner commande au driver
+App -> DB: updateOrder(orderId, {driverId, status: 'delivering'})
+DB --> App: ✓ Assigned
+
+== Départ Livraison ==
+Driver -> App: Commencer livraison
+App -> DB: startDelivery(orderId)
+DB --> App: status = 'delivering'
+App -> Notify: sendPushToClient("Votre commande est en route")
+Notify --> Client: 📱 Notification
+
+== Suivi GPS ==
+loop Toutes les 30 secondes
+  Driver -> App: Update position GPS
+  App -> DB: updateLocation(orderId, {lat, lng, timestamp})
+end
+
+== Arrivée ==
+Driver -> App: Arrivé chez le client
+Driver -> Client: Livrer colis
+Client -> Driver: Confirmer réception
+Driver -> App: Compléter livraison
+App -> DB: completeDelivery(orderId)
+DB --> App: status = 'completed'
+App -> Notify: sendPushToClient("Commande livrée ✓")
+Notify --> Client: 📱 Notification finale
+
+@enduml
+
+' ============================================================================
+' 6. DIAGRAMME D'ACTIVITÉ - CYCLE DE VIE COMMANDE
+' ============================================================================
+
+@startuml PortoMarket_Activity_OrderLifecycle
+title "Activité: Cycle de vie d'une commande"
+
+start
+:Client crée une commande;
+:Statut: pending_payment;
+
+partition "Paiement" {
+  :Client effectue paiement Mobile Money;
+  if (Paiement réussi ?) then (oui)
+    :Statut: confirmed;
+  else (non)
+    :Statut: cancelled;
+    stop
+  endif
+}
+
+partition "Validation Manager" {
+  :Manager vérifie la commande;
+  if (Commande valide ?) then (oui)
+    :Statut: confirmed;
+  else (non)
+    :Statut: cancelled;
+    stop
+  endif
+}
+
+partition "Achat" {
+  :Statut: buying;
+  :Buyer(s) achètent les articles;
+  repeat:Marquer chaque article\n(bought/unavailable/substituted);
+  until (Tous les articles traités ?) is non
+  :Statut: sorting;
+}
+
+partition "Tri et Préparation" {
+  :Équipe trie les articles par commande;
+  :Vérification qualité;
+  :Statut: delivering;
+}
+
+partition "Livraison" {
+  :Driver récupère la commande;
+  :Driver livre au client;
+  if (Client satisfait ?) then (oui)
+    :Statut: completed;
+  else (non)
+    :Gestion réclamation;
+    :Statut: completed (avec note);
+  endif
+}
+
+stop
+
+@enduml
+
+' ============================================================================
+' 7. DIAGRAMME D'ACTIVITÉ - GESTION DES STOCKS ET BATCHES
+' ============================================================================
+
+@startuml PortoMarket_Activity_BatchManagement
+title "Activité: Gestion des batches d'achat"
+
+start
+:Chief Buyer identifie les commandes\nà traiter;
+:Regrouper par catégorie de produits;
+
+foreach "Catégorie" as cat
+  :Créer un batch pour la catégorie;
+  :Assigner un Buyer responsable;
+  :Statut batch: preparing;
+  
+  partition "Au marché" {
+    :Buyer reçoit la liste des articles;
+    :Buyer se rend au marché;
+    
+    foreach "Article dans le batch" as item
+      if (Article disponible ?) then (oui)
+        :Acheter l'article;
+        :Scanner/Enregistrer prix réel;
+        :Statut item: bought;
+      else (non)
+        if (Substitution possible ?) then (oui)
+          :Proposer produit alternatif;
+          if (Client accepte ?) then (oui)
+            :Statut item: substituted;
+          else (non)
+            :Statut item: unavailable;
+          endif
+        else (non)
+          :Statut item: unavailable;
+        endif
+      endif
+    endforeach
+  }
+  
+  :Buyer termine le batch;
+  :Statut batch: completed;
+endforeach
+
+:Vérifier si toutes les commandes\nsont complètes;
+if (Tous les batches terminés ?) then (oui)
+  :Passer les commandes en statut "sorting";
+else (non)
+  :Attendre les batches restants;
+endif
+
+stop
+
+@enduml
+
+' ============================================================================
+' 8. DIAGRAMME D'ÉTAT-TRANSITION - COMMANDE
+' ============================================================================
+
+@startuml PortoMarket_State_Order
+title "Diagramme d'état: Commande"
+
+[*] --> PendingPayment : Création commande
+
+state "Pending Payment" as PP {
+  note: En attente de paiement\nMobile Money
+}
+
+state "Confirmed" as C {
+  note: Payé et validé\npar le manager
+}
+
+state "Buying" as B {
+  note: Buyers en train\nd'acheter au marché
+}
+
+state "Sorting" as S {
+  note: Tri et préparation\ndes articles
+}
+
+state "Delivering" as D {
+  note: En cours de livraison\npar le driver
+}
+
+state "Completed" as Comp {
+  note: Commande livrée ✅
+}
+
+state "Cancelled" as Canc {
+  note: Annulée ❌
+}
+
+PP --> C : Paiement validé
+PP --> Canc : Échec paiement / Timeout
+C --> B : Manager valide
+C --> Canc : Refus manager
+B --> S : Tous articles traités
+S --> D : Préparation terminée
+D --> Comp : Livraison réussie
+D --> Canc : Problème majeur
+
+Canc --> [*]
+Comp --> [*]
+
+@enduml
+
+' ============================================================================
+' 9. DIAGRAMME DE COMPOSANTS
+' ============================================================================
+
+@startuml PortoMarket_Component
+title "Architecture technique - Diagramme de composants"
+
+skinparam componentStyle uml2
+
+package "Frontend (React + TypeScript)" {
+  component [Interface Client] as UIClient
+  component [Interface Manager] as UIMgr
+  component [Interface Buyer] as UIBuyer
+  component [Interface Driver] as UIDriver
+  component [Services métier] as Services
+}
+
+package "Backend (Laravel PHP)" {
+  component [API REST] as API
+  component [Auth Controller] as AuthCtrl
+  component [Order Controller] as OrderCtrl
+  component [Catalog Controller] as CatCtrl
+  component [Database Models] as Models
+}
+
+database "Firebase Firestore" as Firestore {
+  folder "Collections" {
+    component [users] as FUsers
+    component [orders] as FOrders
+    component [products] as FProducts
+    component [batches] as FBatches
+  }
+}
+
+database "MySQL (Laravel)" as MySQL {
+  folder "Tables" {
+    component [users] as MUsers
+    component [orders] as MOrders
+    component [products] as MProducts
+  }
+}
+
+component [Firebase Auth] as FirebaseAuth
+component [Payment APIs\n(FedaPay/Kkiapay)] as PaymentAPI
+component [Google Maps API] as MapsAPI
+
+' Connexions
+UIClient --> Services : utilise
+UIMgr --> Services : utilise
+UIBuyer --> Services : utilise
+UIDriver --> Services : utilise
+
+Services --> API : appels HTTP
+Services --> FirebaseAuth : authentification
+Services --> Firestore : lecture/écriture temps réel
+Services --> PaymentAPI : transactions
+Services --> MapsAPI : géolocalisation
+
+API --> Models : ORM Eloquent
+Models --> MySQL : CRUD
+API --> Firestore : synchronisation
+
+note bottom: Architecture hybride:\n- Temps réel: Firebase\n- Données structurées: Laravel/MySQL\n- Paiement: APIs externes
+
+@enduml
+
+' ============================================================================
+' 10. DIAGRAMME DE DÉPLOIEMENT
+' ============================================================================
+
+@startuml PortoMarket_Deployment
+title "Infrastructure de déploiement"
+
+skinparam deploymentNodeBackgroundColor LightGray
+
+node "Cloud (Vercel / Firebase)" {
+  node "Serveur Frontend" {
+    component [Application React\nSPA] as Frontend
+  }
+  
+  node "Firebase Platform" {
+    database "Firestore DB" as Firestore
+    component "Firebase Auth" as FirebaseAuth
+    component "Cloud Functions" as CloudFunc
+  }
+}
+
+node "Serveur Backend (Laravel)" {
+  component [API REST] as API
+  database "MySQL Database" as MySQL
+}
+
+node "Services Externes" {
+  cloud "FedaPay / Kkiapay" as Payment
+  cloud "Google Maps" as Maps
+  cloud "SMS/Push Notifications" as Notify
+}
+
+node "Clients" {
+  device "📱 Mobile Client" as MobileClient
+  device "💻 Desktop Manager" as DesktopMgr
+  device "📱 Mobile Buyer" as MobileBuyer
+  device "📱 Mobile Driver" as MobileDriver
+}
+
+' Connexions
+MobileClient --> Frontend : HTTPS
+DesktopMgr --> Frontend : HTTPS
+MobileBuyer --> Frontend : HTTPS
+MobileDriver --> Frontend : HTTPS
+
+Frontend --> API : REST API
+Frontend --> Firestore : Real-time SDK
+Frontend --> FirebaseAuth : Auth SDK
+
+API --> MySQL : SQL Queries
+API --> Firestore : Sync data
+
+API --> Payment : Payment Processing
+API --> Maps : Geocoding/Routing
+API --> Notify : Send notifications
+
+CloudFunc --> Firestore : Triggers
+CloudFunc --> Notify : Push notifications
+
+legend right
+  |= Type |= Description |
+  | <#LightBlue>Rectangle</#> | Serveur/Node |
+  | <#LightGreen>Cylindre</#> | Base de données |
+  | <#Pink>Cloud</#> | Service externe |
+  | <#Yellow>Device</#> | Utilisateur final |
+endlegend
+
+@enduml
+
+@enduml

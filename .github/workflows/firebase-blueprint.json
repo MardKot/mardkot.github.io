@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "System user with specific role and agency affiliation.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["client", "manager", "chief_buyer", "buyer", "driver"] },
+        "agencyId": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "agencies": {
+      "title": "Agency",
+      "description": "Physical branch near a market.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "marketName": { "type": "string" },
+        "location": { "type": "object" },
+        "cashBalance": { "type": "number" }
+      },
+      "required": ["id", "name", "marketName"]
+    },
+    "orders": {
+      "title": "Order",
+      "description": "Customer purchase request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "agencyId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending_payment", "confirmed", "buying", "sorting", "delivering", "completed", "cancelled"] },
+        "totalAmount": { "type": "number" },
+        "momoTransactionId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deliveryAddress": { "type": "string" },
+        "timeWindow": { "type": "string" }
+      },
+      "required": ["id", "clientId", "agencyId", "status", "totalAmount"]
+    },
+    "orderItems": {
+      "title": "OrderItem",
+      "description": "Individual product in an order.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "batchId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "quantity": { "type": "string" },
+        "category": { "type": "string" },
+        "isFreeList": { "type": "boolean" },
+        "estimatedBudget": { "type": "number" },
+        "actualPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "assigned", "bought", "unavailable", "substituted"] },
+        "substitutionProposalId": { "type": "string" }
+      },
+      "required": ["id", "orderId", "name", "status"]
+    },
+    "batches": {
+      "title": "Batch",
+      "description": "Grouped items for a buyer.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "agencyId": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["preparing", "active", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "buyerId", "agencyId", "status"]
+    },
+    "products": {
+      "title": "Product",
+      "description": "Available market product.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "unit": { "type": "string" },
+        "image": { "type": "string" },
+        "category": { "type": "string" },
+        "available": { "type": "boolean" },
+        "rating": { "type": "number" }
+      },
+      "required": ["name", "price", "unit", "category", "available"]
+    },
+    "categories": {
+      "title": "Category",
+      "description": "Product classification.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["name", "icon"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "users", "description": "Global user profiles" },
+    "/agencies/{agencyId}": { "schema": "agencies", "description": "Agencies metadata" },
+    "/orders/{orderId}": { "schema": "orders", "description": "Customer orders" },
+    "/orders/{orderId}/items/{itemId}": { "schema": "orderItems", "description": "Items within an order" },
+    "/batches/{batchId}": { "schema": "batches", "description": "Buying batches" },
+    "/products/{productId}": { "schema": "products", "description": "Market catalog products" },
+    "/categories/{categoryId}": { "schema": "categories", "description": "Market catalog categories" },
+    "/agencies/{agencyId}/cash_logs/{logId}": { "schema": { "type": "object" }, "description": "Treasury logs" }
+  }
+}

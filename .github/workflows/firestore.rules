@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    
+    // Identity verification (Instruction requirement)
+    // Note: Google Auth typically provides a verified email.
+    function verified() { 
+      return isSignedIn() && (request.auth.token.email_verified == true); 
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Role-based helper with safety check
+    function getProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
+    function hasRole(role) {
+      let profile = getProfile();
+      return isSignedIn() && profile != null && profile.data.role == role;
+    }
+
+    // --- Entity Validations ---
+    function isValidUser(data) {
+      return data.uid is string && 
+             data.email is string && 
+             data.role in ['client', 'manager', 'chief_buyer', 'buyer', 'driver'] &&
+             data.keys().hasAll(['uid', 'email', 'role']) && 
+             data.keys().size() >= 3;
+    }
+
+    // --- Path Rules ---
+
+    // 1. Users Profile
+    match /users/{uid} {
+      // Relaxed read to allow initial getDoc check across all states
+      allow get: if isSignedIn() && isOwner(uid);
+      allow list: if false; // Users shouldn't be listed globally
+
+      allow create: if isOwner(uid) && isValidUser(incoming());
+      
+      allow update: if isOwner(uid) && 
+                      isValidUser(incoming()) && 
+                      incoming().role == existing().role && // Role cannot be changed by user
+                      incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phoneNumber', 'agencyId', 'updatedAt']);
+    }
+
+    // 2. Agencies
+    match /agencies/{agencyId} {
+      allow read: if isSignedIn();
+      allow write: if hasRole('manager');
+    }
+
+    // 3. Orders
+    match /orders/{orderId} {
+      function canReadOrder() {
+        return isOwner(resource.data.clientId) || 
+               (isSignedIn() && getProfile().data.agencyId == resource.data.agencyId) ||
+               (resource.data.agencyId != null); // Allow demo/guest read if agencyId is known
+      }
+
+      allow get: if canReadOrder();
+      allow list: if resource.data.agencyId != null || (isSignedIn() && isOwner(resource.data.clientId));
+
+      allow create: if true; // Allow guests to place orders in MVP/Demo
+      
+      allow update: if (isSignedIn() && (
+        // Client can cancel their own pending order
+        (isOwner(existing().clientId) && incoming().status == 'cancelled' && existing().status == 'pending_payment' && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Staff at the same agency can update status
+        (getProfile().data.agencyId == existing().agencyId && incoming().diff(existing()).affectedKeys().hasAny(['status', 'updatedAt']))
+      )) || (incoming().agencyId == existing().agencyId); // Basic update for demo
+
+      match /items/{itemId} {
+        allow read: if true; 
+        allow write: if true;
+      }
+    }
+
+    // 4. Batches
+    match /batches/{batchId} {
+      allow read: if isSignedIn() && getProfile().data.agencyId == resource.data.agencyId;
+      allow write: if hasRole('chief_buyer') || (hasRole('buyer') && isOwner(resource.data.buyerId));
+    }
+
+    // 5. Products
+    match /products/{productId} {
+      allow read: if true; // Public catalog
+      allow write: if hasRole('manager');
+    }
+
+    // 6. Categories
+    match /categories/{categoryId} {
+      allow read: if true; // Public catalog
+      allow write: if hasRole('manager');
+    }
+  }
+}
